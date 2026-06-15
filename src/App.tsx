@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import Terrain, { TERRAIN_SIZE } from './Terrain';
 import DataLayers from './DataLayers';
 import ProfileTool from './ProfileTool';
-import { terrainRegions, dataLayers, TerrainRegion, calculateSurfaceDistance } from './terrainData';
+import { terrainRegions, dataLayers, TerrainRegion, calculateSurfaceDistance, getHeightAt } from './terrainData';
 
 type ProfilePoint = { x: number; z: number };
 type Profile3D = THREE.Vector3[] | null;
@@ -65,10 +65,12 @@ export default function App() {
     (e: ThreeEvent<MouseEvent>) => {
       if (!profileMode && !measureMode) return;
       e.stopPropagation();
-      const point = e.point;
+      const point = e.point.clone();
       const halfSize = TERRAIN_SIZE / 2;
+      const maxHeight = TERRAIN_SIZE * 0.45;
       const nx = (point.x + halfSize) / TERRAIN_SIZE;
       const nz = (point.z + halfSize) / TERRAIN_SIZE;
+      point.y = getHeightAt(region, nx, nz) * maxHeight;
 
       if (profileMode) {
         const newPoint = { x: nx, z: nz };
@@ -76,10 +78,10 @@ export default function App() {
 
         if (newPoints.length === 1) {
           setProfilePoints2D(newPoints);
-          setProfilePoints3D([point.clone()]);
+          setProfilePoints3D([point]);
         } else if (newPoints.length === 2) {
           setProfilePoints2D(newPoints);
-          setProfilePoints3D([profilePoints3D![0], point.clone()]);
+          setProfilePoints3D([profilePoints3D![0], point]);
           setShowProfile(true);
           setProfileMode(false);
         }
@@ -89,16 +91,16 @@ export default function App() {
 
         if (newPoints.length === 1) {
           setMeasurePoints2D(newPoints);
-          setMeasurePoints3D([point.clone()]);
+          setMeasurePoints3D([point]);
         } else if (newPoints.length === 2) {
           setMeasurePoints2D(newPoints);
-          setMeasurePoints3D([measurePoints3D![0], point.clone()]);
+          setMeasurePoints3D([measurePoints3D![0], point]);
           setShowMeasure(true);
           setMeasureMode(false);
         }
       }
     },
-    [profileMode, measureMode, profilePoints2D, profilePoints3D, measurePoints2D, measurePoints3D]
+    [profileMode, measureMode, profilePoints2D, profilePoints3D, measurePoints2D, measurePoints3D, region]
   );
 
   const handleTerrainPointerMove = useCallback(

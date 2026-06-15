@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { generateHeightMap, TerrainRegion } from './terrainData';
+import { generateHeightMap, TerrainRegion, getHeightAt } from './terrainData';
 
 const TERRAIN_SIZE = 20;
 const SEGMENTS = 200;
@@ -89,6 +89,40 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
     onPointerMove(point, nx, nz, height);
   };
 
+  const buildTerrainPath = (p0: THREE.Vector3, p1: THREE.Vector3, numSamples: number = 150): Float32Array => {
+    const halfSize = TERRAIN_SIZE / 2;
+    const maxHeight = TERRAIN_SIZE * 0.45;
+    const nx0 = (p0.x + halfSize) / TERRAIN_SIZE;
+    const nz0 = (p0.z + halfSize) / TERRAIN_SIZE;
+    const nx1 = (p1.x + halfSize) / TERRAIN_SIZE;
+    const nz1 = (p1.z + halfSize) / TERRAIN_SIZE;
+
+    const positions = new Float32Array((numSamples + 1) * 3);
+
+    for (let i = 0; i <= numSamples; i++) {
+      const t = i / numSamples;
+      const nx = nx0 + (nx1 - nx0) * t;
+      const nz = nz0 + (nz1 - nz0) * t;
+      const h = getHeightAt(region, nx, nz) * maxHeight;
+      const x = nx * TERRAIN_SIZE - halfSize;
+      const z = nz * TERRAIN_SIZE - halfSize;
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = h + 0.3;
+      positions[i * 3 + 2] = z;
+    }
+
+    return positions;
+  };
+
+  const getTerrainPoint = (p: THREE.Vector3): THREE.Vector3 => {
+    const halfSize = TERRAIN_SIZE / 2;
+    const maxHeight = TERRAIN_SIZE * 0.45;
+    const nx = (p.x + halfSize) / TERRAIN_SIZE;
+    const nz = (p.z + halfSize) / TERRAIN_SIZE;
+    const h = getHeightAt(region, nx, nz) * maxHeight;
+    return new THREE.Vector3(p.x, h, p.z);
+  };
+
   return (
     <group>
       <mesh
@@ -124,11 +158,8 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              count={2}
-              array={new Float32Array([
-                profilePoints[0].x, profilePoints[0].y + 0.3, profilePoints[0].z,
-                profilePoints[1].x, profilePoints[1].y + 0.3, profilePoints[1].z,
-              ])}
+              count={151}
+              array={buildTerrainPath(profilePoints[0], profilePoints[1])}
               itemSize={3}
             />
           </bufferGeometry>
@@ -137,12 +168,15 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
       )}
 
       {/* Profile point markers */}
-      {profilePoints && profilePoints.map((p, i) => (
-        <mesh key={i} position={[p.x, p.y + 0.3, p.z]}>
-          <sphereGeometry args={[0.2, 16, 16]} />
-          <meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={0.5} />
-        </mesh>
-      ))}
+      {profilePoints && profilePoints.map((p, i) => {
+        const tp = getTerrainPoint(p);
+        return (
+          <mesh key={i} position={[tp.x, tp.y + 0.3, tp.z]}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={0.5} />
+          </mesh>
+        );
+      })}
 
       {/* Measure line */}
       {measurePoints && measurePoints.length === 2 && (
@@ -150,11 +184,8 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              count={2}
-              array={new Float32Array([
-                measurePoints[0].x, measurePoints[0].y + 0.3, measurePoints[0].z,
-                measurePoints[1].x, measurePoints[1].y + 0.3, measurePoints[1].z,
-              ])}
+              count={151}
+              array={buildTerrainPath(measurePoints[0], measurePoints[1])}
               itemSize={3}
             />
           </bufferGeometry>
@@ -163,12 +194,15 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
       )}
 
       {/* Measure point markers */}
-      {measurePoints && measurePoints.map((p, i) => (
-        <mesh key={`m-${i}`} position={[p.x, p.y + 0.3, p.z]}>
-          <sphereGeometry args={[0.2, 16, 16]} />
-          <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} />
-        </mesh>
-      ))}
+      {measurePoints && measurePoints.map((p, i) => {
+        const tp = getTerrainPoint(p);
+        return (
+          <mesh key={`m-${i}`} position={[tp.x, tp.y + 0.3, tp.z]}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
