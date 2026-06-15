@@ -5,10 +5,13 @@ import * as THREE from 'three';
 import Terrain, { TERRAIN_SIZE } from './Terrain';
 import DataLayers from './DataLayers';
 import ProfileTool from './ProfileTool';
-import { terrainRegions, dataLayers, TerrainRegion } from './terrainData';
+import { terrainRegions, dataLayers, TerrainRegion, calculateSurfaceDistance } from './terrainData';
 
 type ProfilePoint = { x: number; z: number };
-type Profile3D = THREE.Vector3[];
+type Profile3D = THREE.Vector3[] | null;
+
+type MeasurePoint = { x: number; z: number };
+type Measure3D = THREE.Vector3[] | null;
 
 export default function App() {
   const [activeRegion, setActiveRegion] = useState<string>('plateau');
@@ -20,6 +23,10 @@ export default function App() {
   const [profilePoints2D, setProfilePoints2D] = useState<ProfilePoint[]>([]);
   const [profilePoints3D, setProfilePoints3D] = useState<Profile3D>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurePoints2D, setMeasurePoints2D] = useState<MeasurePoint[]>([]);
+  const [measurePoints3D, setMeasurePoints3D] = useState<Measure3D>(null);
+  const [showMeasure, setShowMeasure] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
 
@@ -56,27 +63,42 @@ export default function App() {
 
   const handleTerrainClick = useCallback(
     (e: ThreeEvent<MouseEvent>) => {
-      if (!profileMode) return;
+      if (!profileMode && !measureMode) return;
       e.stopPropagation();
       const point = e.point;
       const halfSize = TERRAIN_SIZE / 2;
       const nx = (point.x + halfSize) / TERRAIN_SIZE;
       const nz = (point.z + halfSize) / TERRAIN_SIZE;
 
-      const newPoint = { x: nx, z: nz };
-      const newPoints = [...profilePoints2D, newPoint];
+      if (profileMode) {
+        const newPoint = { x: nx, z: nz };
+        const newPoints = [...profilePoints2D, newPoint];
 
-      if (newPoints.length === 1) {
-        setProfilePoints2D(newPoints);
-        setProfilePoints3D([point.clone()]);
-      } else if (newPoints.length === 2) {
-        setProfilePoints2D(newPoints);
-        setProfilePoints3D([profilePoints3D![0], point.clone()]);
-        setShowProfile(true);
-        setProfileMode(false);
+        if (newPoints.length === 1) {
+          setProfilePoints2D(newPoints);
+          setProfilePoints3D([point.clone()]);
+        } else if (newPoints.length === 2) {
+          setProfilePoints2D(newPoints);
+          setProfilePoints3D([profilePoints3D![0], point.clone()]);
+          setShowProfile(true);
+          setProfileMode(false);
+        }
+      } else if (measureMode) {
+        const newPoint = { x: nx, z: nz };
+        const newPoints = [...measurePoints2D, newPoint];
+
+        if (newPoints.length === 1) {
+          setMeasurePoints2D(newPoints);
+          setMeasurePoints3D([point.clone()]);
+        } else if (newPoints.length === 2) {
+          setMeasurePoints2D(newPoints);
+          setMeasurePoints3D([measurePoints3D![0], point.clone()]);
+          setShowMeasure(true);
+          setMeasureMode(false);
+        }
       }
     },
-    [profileMode, profilePoints2D, profilePoints3D]
+    [profileMode, measureMode, profilePoints2D, profilePoints3D, measurePoints2D, measurePoints3D]
   );
 
   const handleTerrainPointerMove = useCallback(
@@ -109,10 +131,18 @@ export default function App() {
     setProfilePoints3D(null);
   };
 
+  const closeMeasure = () => {
+    setShowMeasure(false);
+    setMeasurePoints2D([]);
+    setMeasurePoints3D(null);
+  };
+
   const switchRegion = (id: string) => {
     setActiveRegion(id);
     closeProfile();
     setProfileMode(false);
+    closeMeasure();
+    setMeasureMode(false);
   };
 
   const enterProfileMode = () => {
@@ -120,6 +150,17 @@ export default function App() {
     setProfilePoints2D([]);
     setProfilePoints3D(null);
     setShowProfile(false);
+    setMeasureMode(false);
+    closeMeasure();
+  };
+
+  const enterMeasureMode = () => {
+    setMeasureMode(true);
+    setMeasurePoints2D([]);
+    setMeasurePoints3D(null);
+    setShowMeasure(false);
+    setProfileMode(false);
+    closeProfile();
   };
 
   return (
@@ -146,14 +187,15 @@ export default function App() {
           <Terrain
             region={region}
             profilePoints={profilePoints3D}
+            measurePoints={measurePoints3D}
             onPointerMove={() => {}}
             onPointerOut={() => setHoverInfo(null)}
           />
 
           <DataLayers region={region} activeLayers={activeLayers} layers={dataLayers} />
 
-          {/* Invisible click plane for profile tool */}
-          {profileMode && (
+          {/* Invisible click plane for profile and measure tools */}
+          {(profileMode || measureMode) && (
             <mesh
               rotation={[-Math.PI / 2, 0, 0]}
               position={[0, TERRAIN_SIZE * 0.25, 0]}
@@ -226,6 +268,17 @@ export default function App() {
               清除剖面
             </button>
           )}
+          <button
+            className={`tool-btn ${measureMode ? 'active' : ''}`}
+            onClick={measureMode ? () => setMeasureMode(false) : enterMeasureMode}
+          >
+            {measureMode ? '取消测量' : '距离测量'}
+          </button>
+          {showMeasure && (
+            <button className="tool-btn" onClick={closeMeasure}>
+              清除测量
+            </button>
+          )}
         </div>
 
         {/* Hover info */}
@@ -254,6 +307,54 @@ export default function App() {
             onClose={closeProfile}
           />
         )}
+
+        {/* Measure panel */}
+        {showMeasure && measurePoints2D.length === 2 && (() => {
+          const maxHeight = TERRAIN_SIZE * 0.45;
+          const result = calculateSurfaceDistance(
+            region,
+            measurePoints2D[0],
+            measurePoints2D[1],
+            TERRAIN_SIZE,
+            maxHeight
+          );
+          const elevToMeters = 8000 / maxHeight;
+          return (
+            <div className="profile-panel">
+              <h3>
+                距离测量
+                <button className="profile-close" onClick={closeMeasure}>×</button>
+              </h3>
+              <div className="hint">A → B 沿地表路径</div>
+              <div className="measure-stats">
+                <div className="measure-stat">
+                  <span className="measure-label">地表距离</span>
+                  <span className="measure-value">{result.surfaceDistance.toFixed(2)} km</span>
+                </div>
+                <div className="measure-stat">
+                  <span className="measure-label">直线距离</span>
+                  <span className="measure-value">{result.straightDistance.toFixed(2)} km</span>
+                </div>
+                <div className="measure-stat">
+                  <span className="measure-label">累计爬升</span>
+                  <span className="measure-value">{Math.round(result.elevationGain * elevToMeters)} m</span>
+                </div>
+                <div className="measure-stat">
+                  <span className="measure-label">累计下降</span>
+                  <span className="measure-value">{Math.round(result.elevationLoss * elevToMeters)} m</span>
+                </div>
+                <div className="measure-stat">
+                  <span className="measure-label">最高海拔</span>
+                  <span className="measure-value">{Math.round(result.maxElevation * elevToMeters)} m</span>
+                </div>
+                <div className="measure-stat">
+                  <span className="measure-label">最低海拔</span>
+                  <span className="measure-value">{Math.round(result.minElevation * elevToMeters)} m</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Tooltip near cursor */}

@@ -131,6 +131,78 @@ export function getLatLon(
   };
 }
 
+// Calculate surface distance along terrain between two points (normalized coords)
+// Returns distance in the same units as used by the profile tool (scene units, presented as km)
+export function calculateSurfaceDistance(
+  region: TerrainRegion,
+  p0: { x: number; z: number },
+  p1: { x: number; z: number },
+  terrainSize: number,
+  maxHeight: number,
+  numSamples: number = 300
+): {
+  straightDistance: number;
+  surfaceDistance: number;
+  elevationGain: number;
+  elevationLoss: number;
+  maxElevation: number;
+  minElevation: number;
+} {
+  let surfaceDist = 0;
+  let elevGain = 0;
+  let elevLoss = 0;
+  let maxElev = -Infinity;
+  let minElev = Infinity;
+
+  let prevH = 0;
+  let prevX = 0;
+  let prevZ = 0;
+
+  for (let i = 0; i <= numSamples; i++) {
+    const t = i / numSamples;
+    const nx = p0.x + (p1.x - p0.x) * t;
+    const nz = p0.z + (p1.z - p0.z) * t;
+    const h = getHeightAt(region, nx, nz) * maxHeight;
+
+    const x = nx * terrainSize;
+    const z = nz * terrainSize;
+
+    if (i > 0) {
+      const dx = x - prevX;
+      const dz = z - prevZ;
+      const dh = h - prevH;
+      const segDist = Math.sqrt(dx * dx + dz * dz + dh * dh);
+      surfaceDist += segDist;
+
+      if (dh > 0) {
+        elevGain += dh;
+      } else {
+        elevLoss += -dh;
+      }
+    }
+
+    if (h > maxElev) maxElev = h;
+    if (h < minElev) minElev = h;
+
+    prevH = h;
+    prevX = x;
+    prevZ = z;
+  }
+
+  const dx = (p1.x - p0.x) * terrainSize;
+  const dz = (p1.z - p0.z) * terrainSize;
+  const straightDist = Math.sqrt(dx * dx + dz * dz);
+
+  return {
+    straightDistance: straightDist,
+    surfaceDistance: surfaceDist,
+    elevationGain: elevGain,
+    elevationLoss: elevLoss,
+    maxElevation: maxElev,
+    minElevation: minElev,
+  };
+}
+
 // Data layer generators
 export interface DataLayer {
   id: string;

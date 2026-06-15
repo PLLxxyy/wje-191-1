@@ -10,9 +10,10 @@ interface TerrainProps {
   onPointerMove?: (point: THREE.Vector3, nx: number, nz: number, height: number) => void;
   onPointerOut?: () => void;
   profilePoints?: THREE.Vector3[] | null;
+  measurePoints?: THREE.Vector3[] | null;
 }
 
-export default function Terrain({ region, onPointerMove, onPointerOut, profilePoints }: TerrainProps) {
+export default function Terrain({ region, onPointerMove, onPointerOut, profilePoints, measurePoints }: TerrainProps) {
   const meshRef = useRef<THREE.Mesh>(null);
 
   const { geometry, colors, heightData } = useMemo(() => {
@@ -140,6 +141,32 @@ export default function Terrain({ region, onPointerMove, onPointerOut, profilePo
         <mesh key={i} position={[p.x, p.y + 0.3, p.z]}>
           <sphereGeometry args={[0.2, 16, 16]} />
           <meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={0.5} />
+        </mesh>
+      ))}
+
+      {/* Measure line */}
+      {measurePoints && measurePoints.length === 2 && (
+        <line>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array([
+                measurePoints[0].x, measurePoints[0].y + 0.3, measurePoints[0].z,
+                measurePoints[1].x, measurePoints[1].y + 0.3, measurePoints[1].z,
+              ])}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#06b6d4" linewidth={2} />
+        </line>
+      )}
+
+      {/* Measure point markers */}
+      {measurePoints && measurePoints.map((p, i) => (
+        <mesh key={`m-${i}`} position={[p.x, p.y + 0.3, p.z]}>
+          <sphereGeometry args={[0.2, 16, 16]} />
+          <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} />
         </mesh>
       ))}
     </group>
